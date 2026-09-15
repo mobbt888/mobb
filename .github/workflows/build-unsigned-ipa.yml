@@ -42,6 +42,12 @@ jobs:
 
       - name: Show bundled Info.plist
         run: |
+          echo "=== SOURCE Resources/Info.plist ==="
+          ls -la Resources/Info.plist
+          head -c 400 Resources/Info.plist
+          echo ""
+          plutil -p Resources/Info.plist
+          echo "=== BUNDLED Info.plist ==="
           ls -la build/Build/Products/Release-iphoneos/CloudPhone.app
           plutil -p build/Build/Products/Release-iphoneos/CloudPhone.app/Info.plist
 
