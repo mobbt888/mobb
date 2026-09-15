@@ -33,21 +33,9 @@ targets:
       - path: Sources
       - path: Resources
     info:
-      properties:
-        CFBundleDisplayName: 云手机
-        CFBundleDevelopmentRegion: zh_CN
-        UILaunchScreen:
-          UIColorName: ""
-        UIRequiredDeviceCapabilities:
-          - arm64
-        UIViewControllerBasedStatusBarAppearance: true
-        UIUserInterfaceStyle: Automatic
-        NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: false
-          NSAllowsLocalNetworking: false
-        NSCameraUsageDescription: 云手机内的应用使用摄像头时需要此权限
-        NSMicrophoneUsageDescription: 云手机内的应用使用麦克风时需要此权限
-        NSPhotoLibraryAddUsageDescription: 用于保存云手机截图到相册
+      # XcodeGen 2.46 起不再支持 info.properties 内联写法（会报 Decoding failed at "path"），
+      # 必须显式指向一个 Info.plist 文件。
+      path: Resources/Info.plist
     entitlements:
       path: Resources/CloudPhone.entitlements
       properties: {}
