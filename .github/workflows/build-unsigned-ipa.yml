@@ -1,0 +1,38 @@
+# 没有 Mac 也能拿到未签名 ipa：把本目录推到 GitHub，Actions ▸ Build unsigned IPA ▸ Run workflow
+# 跑完在 Run 详情页底部的 Artifacts 下载 CloudPhone-unsigned-ipa。
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_id:
+        description: App 的 Bundle ID（换成你自己的，避免和签名证书不匹配）
+        required: false
+        default: com.js123.cloudphone
+      site_url:
+        description: 壳 App 打开的网页地址
+        required: false
+        default: https://h.js123.com.cn/#/
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Override bundle id and site url
+        run: |
+          perl -pi -e "s{https://h\.js123\.com\.cn/#/}{${{ github.event.inputs.site_url }}}g" Sources/Support/AppConfig.swift
+          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER: .*/PRODUCT_BUNDLE_IDENTIFIER: ${{ github.event.inputs.bundle_id }}/" project.yml
+
+      - name: Build unsigned IPA
+        run: bash Scripts/build_ipa.sh unsigned
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CloudPhone-unsigned-ipa
+          path: build/*.ipa
+          if-no-files-found: error
