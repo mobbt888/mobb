@@ -65,6 +65,14 @@ if [[ "$MODE" == "unsigned" ]]; then
     exit 1
   }
 
+  # Xcode 26 与 XcodeGen 2.46 组合下，INFOPLIST_FILE 的自动处理会把自定义键丢掉
+  # （最终只剩 Xcode 自动生成的字段），所以构建后用工程自带的 plist 覆盖回去，
+  # 顺带展开里面的 $(...) build setting 占位符。
+  mkdir -p build/plist
+  perl -pe "s/\\$\\(PRODUCT_BUNDLE_IDENTIFIER\\)/${BUNDLE_ID}/g; s/\\$\\(EXECUTABLE_NAME\\)/CloudPhone/g; s/\\$\\(PRODUCT_NAME\\)/CloudPhone/g" \
+    Resources/Info.plist > build/plist/Info.plist
+  cp build/plist/Info.plist "$APP/Info.plist"
+
   mkdir -p build/ipa/Payload
   cp -R "$APP" build/ipa/Payload/
   (cd build/ipa && zip -qry ../CloudPhone-unsigned.ipa Payload)
