@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# 诊断 Info.plist 未被使用的问题：对比三种写法的实际 build settings
+# 诊断 Info.plist 未被使用：真实 build 一个 app，打印最终 Info.plist 内容
 # 云端调试用，定位到问题后可删除。
 #
 set +e
@@ -9,39 +9,37 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 1
 
 rm -rf .probe2
-mkdir -p .probe2
+mkdir -p .probe2/app
 
-dump() {
-  local name="$1"
-  local spec="$2"
-  echo "===== VARIANT $name ====="
-  mkdir -p ".probe2/$name"
-  if ! xcodegen generate -s "$spec" -p ".probe2/$name" -r . >/dev/null 2>&1; then
-    echo "(xcodegen generate 失败)"
-    return
-  fi
-  ( cd ".probe2/$name" && xcodebuild -target CloudPhone -configuration Release -sdk iphoneos -showBuildSettings 2>/dev/null ) \
-    | grep -iE "GENERATE_INFOPLIST_FILE|INFOPLIST_FILE |INFOPLIST_KEY|PRODUCT_BUNDLE_IDENTIFIER|ASSETCATALOG" | sed 's/^ *//' | sort
-  echo ""
-}
+echo "===== pbxproj 里的 plist 相关设置 ====="
+xcodegen generate -s project.yml -p .probe2/app -r . >/dev/null 2>&1
+grep -E "GENERATE_INFOPLIST_FILE|INFOPLIST_FILE|INFOPLIST_KEY|COPY_INFOPLIST" .probe2/app/CloudPhone.xcodeproj/project.pbxproj | sed 's/^\s*//' | sort | uniq -c
 
-# A: 当前配置（info.path + GENERATE_INFOPLIST_FILE=NO + INFOPLIST_FILE）
-cp project.yml .probe2/A.yml
-dump A .probe2/A.yml
+echo ""
+echo "===== target build settings ====="
+cd .probe2/app
+xcodebuild -project CloudPhone.xcodeproj -scheme CloudPhone -configuration Release -sdk iphoneos \
+  -showBuildSettings 2>/dev/null | grep -iE "GENERATE_INFOPLIST_FILE|INFOPLIST_FILE|INFOPLIST_KEY|INFOPLIST_OUTPUT" | sed 's/^\s*//' | sort
 
-# C: 去掉 info 段，只留 settings 里的 INFOPLIST_FILE + GENERATE_INFOPLIST_FILE=NO
-sed '/^    info:$/,/^    entitlements:$/ { /^    entitlements:$/!d }' project.yml > .probe2/C.yml
-dump C .probe2/C.yml
+echo ""
+echo "===== 真实 build ====="
+xcodebuild -project CloudPhone.xcodeproj -scheme CloudPhone -configuration Release -sdk iphoneos \
+  -derivedDataPath dd -destination 'generic/platform=iOS' \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+  AD_HOC_CODE_SIGNING_ALLOWED=YES SKIP_INSTALL=NO build 2>&1 | tail -3
 
-# B: 在 C 基础上再去掉 GENERATE_INFOPLIST_FILE
-sed '/^    info:$/,/^    entitlements:$/ { /^    entitlements:$/!d }' project.yml \
-  | grep -v "GENERATE_INFOPLIST_FILE" > .probe2/B.yml
-dump B .probe2/B.yml
+echo ""
+echo "===== 产物 app 内容 ====="
+ls -la dd/Build/Products/Release-iphoneos/CloudPhone.app
 
-echo "=== diff A vs C ==="
-diff .probe2/A.yml .probe2/C.yml
-echo "=== diff C vs B ==="
-diff .probe2/C.yml .probe2/B.yml
+echo ""
+echo "===== 最终 Info.plist ====="
+plutil -p dd/Build/Products/Release-iphoneos/CloudPhone.app/Info.plist
+
+echo ""
+echo "===== 源文件 Info.plist 是否参与 copy ====="
+cd "$ROOT"
+grep -c "Info.plist" .probe2/app/CloudPhone.xcodeproj/project.pbxproj
 
 echo ""
 echo "=== done ==="
