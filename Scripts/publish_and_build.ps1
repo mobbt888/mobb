@@ -164,18 +164,32 @@ if ($conclusion -ne "success") {
 Write-Host "==> 构建成功" -ForegroundColor Green
 
 # ---------- 下载 ipa ----------
-$artifacts = (Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo/actions/runs/$runId/artifacts" -Headers $headers).artifacts
+# 取最新的、未过期的那个（历史 run 的 artifact 会混在列表里）
+$artifacts = @(
+    (Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo/actions/runs/$runId/artifacts" -Headers $headers).artifacts |
+        Where-Object { -not $_.expired } |
+        Sort-Object { [int64]$_.id } -Descending
+)
 if (-not $artifacts) { throw "没有 artifact，请确认 workflow 的 upload-artifact 步骤执行成功" }
+$artifact = $artifacts[0]
 
 $tmp = Join-Path $root "build\_artifact"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+Remove-Item (Join-Path $tmp "*") -Recurse -Force -ErrorAction SilentlyContinue   # 清掉上一次残留，避免解出来的 ipa 张冠李戴
 $zipPath = Join-Path $tmp "artifact.zip"
-Write-Host "==> 下载 $($artifacts[0].name)..." -ForegroundColor Cyan
-Invoke-WebRequest -Uri $artifacts[0].archive_download_url -Headers $headers -OutFile $zipPath
+Write-Host "==> 下载 artifact：$($artifact.name)（id=$($artifact.id)，$($artifact.size_in_bytes) 字节）" -ForegroundColor Cyan
+Invoke-WebRequest -Uri "https://api.github.com/repos/$owner/$repo/actions/artifacts/$($artifact.id)/zip" -Headers $headers -OutFile $zipPath
+
+# GitHub 偶尔把 410 / 重定向正文当成 .zip 写回来，先验一下再解包，别等 Expand-Archive 报错才懵
+$sig = [Text.Encoding]::ASCII.GetString((Get-Content $zipPath -TotalCount 2 -Encoding Byte))
+if ($sig -ne "PK") { throw "artifact 下载异常（不是 zip，开头字节 '$sig'），run 页：$runHtml" }
 
 Expand-Archive -Path $zipPath -DestinationPath $tmp -Force
 $ipa = Get-ChildItem -Path $tmp -Filter *.ipa -Recurse | Select-Object -First 1
-if (-not $ipa) { throw "解包后没找到 .ipa" }
+if (-not $ipa) {
+    $listing = (Get-ChildItem $tmp -Recurse | Select-Object -ExpandProperty Name) -join ", "
+    throw "解包后没找到 .ipa（目录内容：$listing）"
+}
 
 $dest = Join-Path $root "build\$($ipa.Name)"
 Copy-Item $ipa.FullName $dest -Force
