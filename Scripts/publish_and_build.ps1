@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     把本工程上传到 GitHub，触发云端 macOS 构建，并把产出的未签名 ipa 拉回本地。
 
@@ -52,11 +52,23 @@ Write-Host "==> 目标仓库：$owner/$repo（分支 $Branch）" -ForegroundColo
 
 # ---------- 收集文件（排除构建产物） ----------
 $files = Get-ChildItem -Path $root -Recurse -File | Where-Object {
-    $_.FullName -notmatch '[\\/](build|\.git)[\\/]' -and $_.Extension -ne '.zip'
+    $_.FullName -notmatch '[\\/](build|\.git|_icon_backup_[^\\/]*)[\\/]' -and $_.Extension -ne '.zip'
 } | Sort-Object FullName
 
 if ($files.Count -eq 0) { throw "没有找到要上传的文件" }
 Write-Host "==> 待上传 $($files.Count) 个文件" -ForegroundColor Cyan
+
+# 覆盖已存在的文件必须带上它的 blob sha。
+# ⚠️ contents 的 GET 对部分路径会返回 404（拿不到 sha → PUT 报 "sha wasn't supplied"），
+#    必须改用 git trees 递归接口一次性建立 path → sha 索引。
+$treeIndex = @{}
+try {
+    $tree = Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo/git/trees/$Branch`?recursive=1" -Headers $headers
+    foreach ($it in $tree.tree) { if ($it.type -eq 'blob') { $treeIndex[$it.path] = $it.sha } }
+    Write-Host "==> 远端已有 $($treeIndex.Count) 个文件（已建 sha 索引）" -ForegroundColor Cyan
+} catch {
+    Write-Warning "trees 接口失败，退回逐个探测：$($_.Exception.Message)"
+}
 
 function Push-File {
     param($FullPath)
@@ -67,16 +79,31 @@ function Push-File {
     $body = @{ message = "Update $apiPath"; content = $content; branch = $Branch }
 
     # 已存在的文件要带上 sha 才能覆盖更新
-    try {
-        $existing = Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo/contents/$apiPath?ref=$Branch" -Headers $headers
-        if ($existing.sha) { $body.sha = $existing.sha }
-    } catch { }
+    if ($treeIndex.ContainsKey($apiPath)) {
+        $body.sha = $treeIndex[$apiPath]
+    } else {
+        try {
+            $existing = Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo/contents/$apiPath?ref=$Branch" -Headers $headers
+            if ($existing.sha) { $body.sha = $existing.sha }
+        } catch { }
+    }
 
     $json = $body | ConvertTo-Json -Depth 6
-    Invoke-RestMethod `
-        -Uri "https://api.github.com/repos/$owner/$repo/contents/$apiPath" `
-        -Method Put -Headers $headers -ContentType "application/json" `
-        -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 120 | Out-Null
+    $ok = $false
+    for ($attempt = 1; $attempt -le 3 -and -not $ok; $attempt++) {
+        try {
+            Invoke-RestMethod `
+                -Uri "https://api.github.com/repos/$owner/$repo/contents/$apiPath" `
+                -Method Put -Headers $headers -ContentType "application/json" `
+                -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 120 | Out-Null
+            $ok = $true
+        } catch {
+            # 500 多为瞬时故障，重试一次通常就好
+            if ($attempt -eq 3) { throw }
+            Write-Host "    ! 第 $attempt 次失败，重试：$apiPath" -ForegroundColor Yellow
+            Start-Sleep -Seconds 3
+        }
+    }
 
     Write-Host "    ↑ $apiPath" -ForegroundColor DarkGray
 }
