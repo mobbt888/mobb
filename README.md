@@ -117,16 +117,24 @@ cd resign && zip -qry ../CloudPhone-signed.ipa Payload
 
 ### Info.plist 关键项
 
-已全部写进 `project.yml` 的 `info.properties`，改那里即可，Xcode 里不用再点：
+全部集中在 **`Resources/Info.plist`**，直接改这个文件（`project.yml` 里不再写 info 段，原因见下一节）：
 
-| Key | Value | 说明 |
+| Key | 当前值 | 说明 |
 | --- | --- | --- |
-| App Transport Security Settings ▸ Allow Arbitrary Loads | `NO` | 站点是全站 HTTPS，**不要**打开，保持系统默认更安全 |
-| Privacy – Camera Usage Description | 按需 | 云手机里若调用扫码/拍照，须说明用途才能在真机通过审核 |
-| Privacy – Microphone Usage Description | 按需 | 同上，语音输入场景需要 |
-| Privacy – Photo Library Usage Description | 按需 | 截图保存场景需要 |
-| Background Modes | `audio`（可选） | 需要后台保持云手机画面音频时勾选；不勾选也能正常运行 |
-| Supported orientations | Portrait（建议） | 远程桌面类界面横竖屏混切易错乱 |
+| Allow Arbitrary Loads | `YES` | 壳要能加载站点内的 HTTP 资源才放开的。**站点若全站 HTTPS，建议改回 `NO`** |
+| Privacy – Camera / Microphone / Photo Library Usage Description | 已填 | 真机首次调用时弹的系统授权文案，按你的实际用语改即可 |
+| UIApplicationSceneManifest | 已配 | SwiftUI App 生命周期依赖它，缺失会白屏 |
+| MinimumOSVersion | `16.0` | 要改支持的最低系统版本，改这里（别改 `project.yml` 的 deploymentTarget，那份会被覆盖） |
+| UISceneConfigurations | 已配 | 只给了 `UISceneConfigurationName`，**没有** `UISceneDelegateClassName`，纯 SwiftUI `@main` 入口就不能填，填了会崩 |
+
+## XcodeGen 2.46 的坑（已全部规避，别改回去）
+
+| 现象 | 真正原因 | 现在的做法 |
+| --- | --- | --- |
+| `Parsing project spec failed: Decoding failed at "path": Nothing found` | 2.46 起不再认 `info.properties` 内联写法 | 删掉 `info` 段，plist 用独立文件 |
+| 改好的 `Info.plist` 被打回 XcodeGen 默认那 8 个字段 | **一旦写出 `info.path`，`xcodegen generate` 就会用它自带模板覆盖这个文件** | target 完全不写 `info`，改用 `settings.base.INFOPLIST_FILE` 指定 |
+| 包里只剩 Xcode 自动生成的字段，显示名/权限/ATS 全丢 | `GENERATE_INFOPLIST_FILE` 默认是 `YES` | 显式设 `GENERATE_INFOPLIST_FILE: "NO"` |
+| `cannot be opened because it is in a future Xcode project file format (77)` | 2.46 产出的是 Xcode 16 工程格式，Xcode 15 打不开 | Actions 跑 `macos-15`，并显式 `xcode-select` 到最新的 Xcode |
 
 ## 已经处理掉的封装坑
 
