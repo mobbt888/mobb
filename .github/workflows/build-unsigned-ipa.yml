@@ -16,9 +16,18 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      # XcodeGen 2.46 生成 Xcode 16 的工程格式（objectVersion 77），
+      # Xcode 15 打不开（future Xcode project file format），必须显式切到最新的 Xcode 16。
+      - name: Select latest Xcode
+        run: |
+          XC="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1)"
+          echo "selected: $XC"
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
 
       - name: Install xcodegen
         run: brew install xcodegen
