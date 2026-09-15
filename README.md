@@ -1,6 +1,6 @@
-# 云手机 iOS 封装壳
+# 极速云手机 iOS 封装壳
 
-把 `https://h.js123.com.cn/`（云手机 Web 控制台）封装成 iOS App 的最小可用工程骨架，SwiftUI + WKWebView，遵循 Apple HIG（安全区、深色模式、动态字体、44pt 触控目标）。
+把 `https://h.js123.com.cn/`（极速云手机 Web 控制台）封装成 iOS App 的最小可用工程骨架，SwiftUI + WKWebView，遵循 Apple HIG（安全区、深色模式、动态字体、44pt 触控目标）。
 
 ## 关于原始资料
 
@@ -107,9 +107,34 @@ cd resign && zip -qry ../CloudPhone-signed.ipa Payload
 | --- | --- | --- |
 | Bundle ID | `project.yml` 的 `PRODUCT_BUNDLE_IDENTIFIER` | 需在开发者后台注册 Identifiers；换包就换 ID，别和别人撞 |
 | 团队 ID | `project.yml` 的 `DEVELOPMENT_TEAM` | 脚本也会按环境变量写回 |
-| App 图标 | `Resources/Assets.xcassets/AppIcon.appiconset/` | 目录结构已放好，**png 要你自己补齐**：40/60/120/180 等各尺寸；缺 1024x1024 无法通过 App Store 校验 |
+| App 图标 | `Resources/Assets.xcassets/AppIcon.appiconset/` | **已换成正式 logo**（深蓝线稿云 + 橙色闪电，白底）。换自己的图见下方「换图标 / 换显示名」 |
+| 显示名 | `Resources/Info.plist` 的 `CFBundleDisplayName` | 当前 **极速云手机**；同一文件里的相机/麦克风/相册权限文案也记得同步 |
 | 后台音频 | `Resources/CloudPhone.entitlements` | 需要息屏后保持云手机音频时，把 `UIBackgroundModes` 填 `audio` |
 | 隐私清单 | Target ▸ Privacy | 用到相机/麦克风/相册时需在 App Store Connect 声明用途，否则审核被拒 |
+
+### 换图标 / 换显示名
+
+**换图标**：准备一张 **1024×1024（或更大）的正方形 PNG**，直接覆盖 `Resources/Assets.xcassets/AppIcon.appiconset/` 里同名的 9 个文件即可，`Contents.json` 不用动（它的 `filename` 已经固定写死这几个名字）。两条硬要求：
+
+1. **必须不透明**、**不能自带圆角**——iOS 会自己裁圆角，带 alpha 通道或圆角的图提交 App Store 会被拒。
+2. 内容四周留一点余量，别贴边，否则被系统裁圆角后会缺角。
+
+手头只有一张带透明圆角的大图时，用这段脚本补齐 9 个尺寸（依赖 `Pillow`，四角透明区自动补白，等比缩放不裁切）：
+
+```python
+from PIL import Image
+im = Image.open("logo.png").convert("RGBA")
+bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
+master = Image.alpha_composite(bg, im).convert("RGB").resize((1024, 1024), Image.LANCZOS)
+for fn, s in [("icon_20x20_2x.png",40),("icon_20x20_3x.png",60),("icon_29x29_2x.png",58),
+              ("icon_29x29_3x.png",87),("icon_40x40_2x.png",80),("icon_40x40_3x.png",120),
+              ("icon_60x60_2x.png",120),("icon_60x60_3x.png",180),("icon_1024x1024_1x.png",1024)]:
+    (master if s == 1024 else master.resize((s, s), Image.LANCZOS)).save(fn, "PNG", optimize=True)
+```
+
+当前的正式 logo 源文件备份在 `_icon_backup_20260915/_source_original_2048.png`（原图 2048×2048 带透明圆角）。
+
+**换显示名**：改 `Resources/Info.plist` 的 `CFBundleDisplayName`，桌面图标下面显示的就是它。注意工程名 / scheme / 产物名仍叫 `CloudPhone`（英文技术标识，改了会连带 CI、脚本路径一起动），两者互不干涉。
 
 ### 审核风险（H5 壳的通病）
 
