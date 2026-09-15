@@ -32,6 +32,14 @@ struct RootView: View {
             if let error = model.error {
                 ErrorOverlay(error: error) { model.reload() }
                     .background(Color(.systemBackground))
+            } else if !model.hasLoadedOnce {
+                // 首屏尚未渲染完成：给个转圈，避免用户对着白屏以为 App 卡死。
+                // 🔴 冷启动白屏的观感问题主要来自这里 —— WebKit 首次内容进程初始化期间没有进度回调。
+                ProgressView()
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(.systemBackground))
+                    .accessibilityLabel("正在加载")
             }
         }
     }
