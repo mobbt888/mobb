@@ -23,9 +23,6 @@ jobs:
       - name: Install xcodegen
         run: brew install xcodegen
 
-      - name: Diagnose project spec
-        run: bash Scripts/probe_spec.sh
-
       - name: Override bundle id and site url
         run: |
           perl -pi -e "s{https://h\.js123\.com\.cn/#/}{${{ github.event.inputs.site_url }}}g" Sources/Support/AppConfig.swift
