@@ -24,20 +24,7 @@ jobs:
         run: brew install xcodegen
 
       - name: Diagnose project spec
-        run: |
-          echo "### repo root"
-          ls -la
-          echo "### Sources"
-          ls -R Sources
-          echo "### Resources"
-          ls -R Resources
-          echo "### xcodegen version"
-          xcodegen --version
-          echo "### YAML object tree"
-          python3 -c "import yaml,json;d=yaml.safe_load(open('project.yml'));print(json.dumps(d,ensure_ascii=False,indent=1))" || echo "python3 yaml failed"
-          echo "### xcodegen verbose generate"
-          xcodegen generate --verbose
-          echo "gen_exit=$?"
+        run: bash Scripts/probe_spec.sh
 
       - name: Override bundle id and site url
         run: |
