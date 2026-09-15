@@ -20,6 +20,9 @@ enum AppConfig {
     /// 首屏自动重试上限，避免站点真挂了时无限重载。
     static let maxFirstLoadRetries = 2
 
+    /// 开屏页停留时长（秒）
+    static let splashDuration: TimeInterval = 3
+
     /// 是否允许 JS 打开的新窗口在 App 内承接（false = 交给系统浏览器）。
     static let opensExternalInSafari = true
 
