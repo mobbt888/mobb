@@ -65,13 +65,54 @@ if [[ "$MODE" == "unsigned" ]]; then
     exit 1
   }
 
-  # Xcode 26 与 XcodeGen 2.46 组合下，INFOPLIST_FILE 的自动处理会把自定义键丢掉
-  # （最终只剩 Xcode 自动生成的字段），所以构建后用工程自带的 plist 覆盖回去，
-  # 顺带展开里面的 $(...) build setting 占位符。
+  # 兜底：以 Xcode 处理后的产物 plist 为基准，只把工程 plist 里「缺失」的键补进去。
+  # ⚠️ 绝对不能用 cp 整文件覆盖 —— 那会连 Xcode 注入的 CFBundleIcons / CFBundleIconName
+  #    一起抹掉，症状是装完桌面图标变成白底网格占位图（名字正常、图标空白）。
   mkdir -p build/plist
   perl -pe "s/\\$\\(PRODUCT_BUNDLE_IDENTIFIER\\)/${BUNDLE_ID}/g; s/\\$\\(EXECUTABLE_NAME\\)/CloudPhone/g; s/\\$\\(PRODUCT_NAME\\)/CloudPhone/g" \
     Resources/Info.plist > build/plist/Info.plist
-  cp build/plist/Info.plist "$APP/Info.plist"
+
+  python3 - "$APP/Info.plist" build/plist/Info.plist <<'PYEOF'
+import plistlib, sys
+
+dst_path, src_path = sys.argv[1], sys.argv[2]
+with open(dst_path, 'rb') as f:
+    dst = plistlib.load(f)
+with open(src_path, 'rb') as f:
+    src = plistlib.load(f)
+
+
+def fill(source, target, prefix=""):
+    added = []
+    for key, value in source.items():
+        if key not in target:
+            target[key] = value
+            added.append(prefix + key)
+        elif isinstance(value, dict) and isinstance(target.get(key), dict):
+            added += fill(value, target[key], prefix + key + ".")
+    return added
+
+
+added = fill(src, dst)
+
+# 双保险：万一 Xcode 没有注入图标声明（ASSETCATALOG_COMPILER_APPICON_NAME 未生效等），
+# 这里手工补一份，指向 Assets.car 里的 AppIcon 集合。
+if 'CFBundleIconName' not in dst and 'CFBundleIcons' not in dst:
+    dst['CFBundleIconName'] = 'AppIcon'
+    dst['CFBundleIcons'] = {
+        'CFBundlePrimaryIcon': {'CFBundleIconFiles': ['AppIcon60x60']}
+    }
+    added.append('CFBundleIconName/CFBundleIcons(手动兜底)')
+
+with open(dst_path, 'wb') as f:
+    plistlib.dump(dst, f)
+
+print('   plist 合并完成，补入键：' + (', '.join(added) if added else '无（产物已完整）'))
+PYEOF
+
+  # 自检：图标声明必须在，否则桌面会显示白底网格
+  /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP/Info.plist" >/dev/null 2>&1 \
+    || echo "⚠️  警告：Info.plist 缺少 CFBundleIconName，图标可能不显示"
 
   mkdir -p build/ipa/Payload
   cp -R "$APP" build/ipa/Payload/
