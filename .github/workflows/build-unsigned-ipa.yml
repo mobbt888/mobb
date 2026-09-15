@@ -32,9 +32,6 @@ jobs:
       - name: Install xcodegen
         run: brew install xcodegen
 
-      - name: Diagnose Info.plist wiring
-        run: bash Scripts/probe2_spec.sh
-
       - name: Override bundle id and site url
         run: |
           perl -pi -e "s{https://h\.js123\.com\.cn/#/}{${{ github.event.inputs.site_url }}}g" Sources/Support/AppConfig.swift
@@ -42,6 +39,11 @@ jobs:
 
       - name: Build unsigned IPA
         run: bash Scripts/build_ipa.sh unsigned
+
+      - name: Show bundled Info.plist
+        run: |
+          ls -la build/Build/Products/Release-iphoneos/CloudPhone.app
+          plutil -p build/Build/Products/Release-iphoneos/CloudPhone.app/Info.plist
 
       - uses: actions/upload-artifact@v4
         with:
