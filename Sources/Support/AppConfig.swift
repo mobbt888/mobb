@@ -14,6 +14,12 @@ enum AppConfig {
     /// 回前台后判定会话已过期、需要重新拉起页面的阈值（秒）。
     static let staleInterval: TimeInterval = 600
 
+    /// 首屏看门狗超时（秒）：冷启动超过此时长仍未渲染成功就自动重载。
+    static let firstLoadTimeout: TimeInterval = 8
+
+    /// 首屏自动重试上限，避免站点真挂了时无限重载。
+    static let maxFirstLoadRetries = 2
+
     /// 是否允许 JS 打开的新窗口在 App 内承接（false = 交给系统浏览器）。
     static let opensExternalInSafari = true
 
