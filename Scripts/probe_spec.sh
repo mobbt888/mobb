@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# 二分定位 XcodeGen 解析 project.yml 失败的字段。
+# 二分定位 XcodeGen 解析失败点（第二轮：聚焦 info 字段写法）
 # 云端调试用，定位到问题后可删除。
 #
 set +e
@@ -8,6 +8,7 @@ set +e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 1
 
+rm -rf .probe
 mkdir -p .probe
 echo "=== cwd: $(pwd)"
 echo "=== xcodegen: $(xcodegen --version 2>&1)"
@@ -17,63 +18,13 @@ gen() {
   local spec="$2"
   echo ""
   echo "===== CASE $name ====="
-  rm -rf ".probe/$name"
   mkdir -p ".probe/$name"
-  xcodegen generate -s "$spec" -p ".probe/$name" 2>&1 | tail -4
+  xcodegen generate -s "$spec" -p ".probe/$name" -r . 2>&1 | tail -4
   echo "exit=${PIPESTATUS[0]}"
 }
 
-# ---- c1: 最小 ----
-cat > .probe/c1.yml <<'EOF'
-name: CloudPhone
-options:
-  deploymentTarget:
-    iOS: "16.0"
-targets:
-  CloudPhone:
-    type: application
-    platform: iOS
-    sources:
-      - path: Sources
-EOF
-gen c1 .probe/c1.yml
-
-# ---- c2: + Resources ----
-cat > .probe/c2.yml <<'EOF'
-name: CloudPhone
-options:
-  deploymentTarget:
-    iOS: "16.0"
-targets:
-  CloudPhone:
-    type: application
-    platform: iOS
-    sources:
-      - path: Sources
-      - path: Resources
-EOF
-gen c2 .probe/c2.yml
-
-# ---- c3: + entitlements ----
-cat > .probe/c3.yml <<'EOF'
-name: CloudPhone
-options:
-  deploymentTarget:
-    iOS: "16.0"
-targets:
-  CloudPhone:
-    type: application
-    platform: iOS
-    sources:
-      - path: Sources
-    entitlements:
-      path: Resources/CloudPhone.entitlements
-      properties: {}
-EOF
-gen c3 .probe/c3.yml
-
-# ---- c4: + info properties ----
-cat > .probe/c4.yml <<'EOF'
+# c10: info.properties 全平铺（无嵌套字典）
+cat > .probe/c10.yml <<'EOF'
 name: CloudPhone
 options:
   deploymentTarget:
@@ -87,67 +38,102 @@ targets:
     info:
       properties:
         CFBundleDisplayName: test
-        UILaunchScreen:
-          UIColorName: ""
+        CFBundleDevelopmentRegion: zh_CN
+        NSCameraUsageDescription: camera reason
 EOF
-gen c4 .probe/c4.yml
+gen c10 .probe/c10.yml
 
-# ---- c5: + settings base ----
-cat > .probe/c5.yml <<'EOF'
+# c11: info.properties 含嵌套字典
+cat > .probe/c11.yml <<'EOF'
 name: CloudPhone
+options:
+  deploymentTarget:
+    iOS: "16.0"
 targets:
   CloudPhone:
     type: application
     platform: iOS
     sources:
       - path: Sources
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.js123.cloudphone
-        PRODUCT_NAME: CloudPhone
+    info:
+      properties:
+        UILaunchScreen:
+          UIColorName: ""
 EOF
-gen c5 .probe/c5.yml
+gen c11 .probe/c11.yml
 
-# ---- c6: + options 全量 ----
-cat > .probe/c6.yml <<'EOF'
+# c12: info.path 指向真实 plist
+cat > .probe/c12.yml <<'EOF'
+name: CloudPhone
+options:
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  CloudPhone:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    info:
+      path: Resources/Info.plist
+EOF
+gen c12 .probe/c12.yml
+
+# c13: 完整替代方案 —— info.path + entitlements + Resources + settings + schemes
+cat > .probe/c13.yml <<'EOF'
 name: CloudPhone
 options:
   deploymentTarget:
     iOS: "16.0"
   createIntermediateGroups: true
   groupSortPosition: none
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    SDKROOT: iphoneos
+    TARGETED_DEVICE_FAMILY: "1"
+  configs:
+    Debug:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
 targets:
   CloudPhone:
     type: application
     platform: iOS
     sources:
       - path: Sources
-EOF
-gen c6 .probe/c6.yml
-
-# ---- c7: + schemes ----
-cat > .probe/c7.yml <<'EOF'
-name: CloudPhone
-options:
-  deploymentTarget:
-    iOS: "16.0"
-targets:
-  CloudPhone:
-    type: application
-    platform: iOS
-    sources:
-      - path: Sources
+      - path: Resources
+    info:
+      path: Resources/Info.plist
+    entitlements:
+      path: Resources/CloudPhone.entitlements
+      properties: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.js123.cloudphone
+        PRODUCT_NAME: CloudPhone
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
 schemes:
   CloudPhone:
     build:
       targets:
         CloudPhone: all
+    run:
+      config: Debug
+    archive:
+      config: Release
 EOF
-gen c7 .probe/c7.yml
+gen c13 .probe/c13.yml
 
-# ---- c8: 原始 project.yml ----
-cp project.yml .probe/c8.yml
-gen c8 .probe/c8.yml
+echo ""
+echo "=== generated projects ==="
+ls -la .probe
 
 echo ""
 echo "=== done ==="
