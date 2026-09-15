@@ -20,6 +20,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Report checkout state
+        run: |
+          echo "=== HEAD ==="
+          git rev-parse HEAD
+          git log -1 --format='%ci | %an | %s'
+          echo "=== Info.plist in workspace ==="
+          wc -c Resources/Info.plist
+          md5 Resources/Info.plist
+          echo "=== same file via raw githubusercontent ==="
+          curl -sS "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/Resources/Info.plist" | wc -c
+
       # XcodeGen 2.46 生成 Xcode 16 的工程格式（objectVersion 77），
       # Xcode 15 打不开（future Xcode project file format），必须显式切到最新的 Xcode 16。
       - name: Select latest Xcode
